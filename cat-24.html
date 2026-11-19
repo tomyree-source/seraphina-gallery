@@ -80,4 +80,149 @@ function show(el){var v=document.getElementById('viewer');document.getElementByI
 function hide(){document.getElementById('viewer').style.display='none';}
 document.addEventListener('keydown',function(e){if(e.key==='Escape')hide();});
 </script>
-<div id="viewer" onclick="hide()"><button id="vclose" onclick="hide()">×</button><img id="vimg" alt=""><div id="vtitle"></div></div></body></html>
+<div id="viewer" onclick="hide()"><button id="vclose" onclick="hide()">×</button><img id="vimg" alt=""><div id="vtitle"></div></div><!-- sera-marks-v1 -->
+<style>
+body{padding-bottom:76px !important}
+figure{border:3px solid transparent}
+figure.mk-fav{border-color:#e0a800;background:#fffbe9}
+figure.mk-fix{border-color:#d43a2f;background:#fff4f2}
+.mkrow{display:flex;gap:4px;margin-top:5px;flex-wrap:wrap}
+.mkbtn{flex:1 1 40%;font-size:11px;padding:6px 2px;border-radius:6px;border:1px solid #c9b8a3;background:#fff;cursor:pointer;color:#333}
+.mkbtn.on-fav{background:#f5c542;border-color:#b8860b;font-weight:bold}
+.mkbtn.on-fix{background:#e2574c;border-color:#a93226;color:#fff;font-weight:bold}
+.mkmemo{width:100%;font-size:11px;padding:6px;border:1px solid #ccc;border-radius:6px;margin-top:4px;box-sizing:border-box}
+#mkbar{position:fixed;left:0;right:0;bottom:0;background:rgba(255,255,255,.98);border-top:1px solid #ddd;padding:8px 10px;z-index:40;display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:12px;box-shadow:0 -2px 8px rgba(0,0,0,.10)}
+#mkbar .cnt{font-weight:bold}
+#mkbar button{font-size:12px;padding:6px 9px;border-radius:999px;border:1px solid #c9b8a3;background:#fff;cursor:pointer}
+#mkbar button.on{background:#8a6d4b;color:#fff}
+#mkbar .send{background:#b5651d;color:#fff;border-color:#b5651d;font-weight:bold}
+#mkmodal{position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;z-index:70;align-items:center;justify-content:center;padding:14px}
+#mkmodal .card{background:#fff;border-radius:10px;padding:14px;width:100%;max-width:560px;max-height:88vh;display:flex;flex-direction:column;gap:8px}
+#mkmodal textarea{width:100%;min-height:220px;font-size:12px;box-sizing:border-box}
+#mkmodal .row{display:flex;gap:8px}
+#mkmodal button{flex:1;padding:9px;border-radius:8px;border:1px solid #c9b8a3;background:#fff;cursor:pointer;font-size:13px}
+#mkmodal .copy{background:#b5651d;color:#fff;border-color:#b5651d;font-weight:bold}
+#vmarks{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:center;padding:6px 10px}
+#vmarks .mkbtn{flex:0 1 auto;padding:8px 12px;font-size:12px}
+#vmarks .mkmemo{max-width:420px;margin-top:0}
+</style>
+<div id="mkbar"></div>
+<div id="mkmodal"><div class="card"><div style="font-weight:bold">Museへの送信文</div><div style="font-size:12px;color:#666">全文をコピーして、セラフィナ工房のチャットに貼ってください。お気に入りは今後の生成の参考に、直したいは修正依頼として受け取ります。</div><textarea id="mktext" readonly></textarea><div class="row"><button class="copy" id="mkcopy">コピーする</button><button id="mkclose">閉じる</button></div><div id="mkcopied" style="font-size:12px;color:#2e7d32"></div></div></div>
+<script>
+(function(){
+var KEY='seraGalleryMarksV1';
+function load(){try{return JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){return{}}}
+function save(d){try{localStorage.setItem(KEY,JSON.stringify(d))}catch(e){}}
+var data=load();
+var page=(location.pathname.split('/').pop()||'index.html');
+var catEl=document.querySelector('header h2')||document.querySelector('header h1');
+var catName=catEl?catEl.textContent.trim():page;
+var filter='all';
+var figs=[], seen={};
+document.querySelectorAll('figure').forEach(function(fg){
+  var img=fg.querySelector('img'); if(!img)return;
+  var title=img.dataset.title||((fg.querySelector('figcaption')||{}).textContent||'').trim();
+  var occ=seen[title]||0; seen[title]=occ+1;
+  var key=page+'|'+title+'|'+occ;
+  var rec=data[key]||{f:0,x:0,m:'',c:catName,t:title};
+  data[key]=rec;
+  var row=document.createElement('div'); row.className='mkrow';
+  var bF=document.createElement('button'); bF.className='mkbtn'; bF.textContent='★お気に入り';
+  var bX=document.createElement('button'); bX.className='mkbtn'; bX.textContent='✎直したい';
+  var memo=document.createElement('input'); memo.className='mkmemo'; memo.type='text'; memo.placeholder='メモ（直したい所・好きな点など）'; memo.value=rec.m||'';
+  bF.addEventListener('click',function(){rec.f=rec.f?0:1;save(data);paint();});
+  bX.addEventListener('click',function(){rec.x=rec.x?0:1;save(data);paint();});
+  memo.addEventListener('change',function(){rec.m=memo.value;save(data);});
+  row.appendChild(bF); row.appendChild(bX); row.appendChild(memo);
+  fg.appendChild(row);
+  figs.push({fg:fg,rec:rec,bF:bF,bX:bX,memo:memo,key:key});
+});
+var bar=document.getElementById('mkbar');
+bar.innerHTML='<span class="cnt" id="mkcnt"></span>'
+ +'<button data-fl="all">すべて</button><button data-fl="fav">★のみ</button><button data-fl="fix">✎のみ</button>'
+ +'<button class="send" id="mksend">Museに送る</button>'
+ +'<span style="color:#888">★=生成の参考にします／✎=修正依頼</span>';
+bar.querySelectorAll('[data-fl]').forEach(function(b){
+  b.addEventListener('click',function(){filter=b.dataset.fl;paint();});
+});
+function paint(){
+  var pf=0,px=0,tf=0,tx=0;
+  Object.keys(data).forEach(function(k){if(data[k].f)tf++;if(data[k].x)tx++;});
+  figs.forEach(function(o){
+    if(o.rec.f)pf++; if(o.rec.x)px++;
+    o.fg.classList.toggle('mk-fav',!!o.rec.f);
+    o.fg.classList.toggle('mk-fix',!!o.rec.x);
+    o.bF.classList.toggle('on-fav',!!o.rec.f);
+    o.bX.classList.toggle('on-fix',!!o.rec.x);
+    if(document.activeElement!==o.memo && o.memo.value!==(o.rec.m||'')) o.memo.value=o.rec.m||'';
+    o.memo.style.display=(o.rec.f||o.rec.x)?'block':'none';
+    var showIt = filter==='all' || (filter==='fav'&&o.rec.f) || (filter==='fix'&&o.rec.x);
+    o.fg.style.display=showIt?'':'none';
+  });
+  bar.querySelectorAll('[data-fl]').forEach(function(b){b.classList.toggle('on',b.dataset.fl===filter);});
+  document.getElementById('mkcnt').textContent='このページ ★'+pf+'／✎'+px+'（全体 ★'+tf+'／✎'+tx+'）';
+  paintViewer();
+}
+function summaryText(){
+  var favs=[],fixs=[];
+  Object.keys(data).forEach(function(k){var r=data[k];if(r.f)favs.push(r);if(r.x)fixs.push(r);});
+  function line(r){return '・['+r.c+'] '+r.t+(r.m?'（メモ：'+r.m+'）':'');}
+  var s='【セラフィナギャラリー】マーク送信\n';
+  s+='■お気に入り（生成の参考）'+favs.length+'件\n'+(favs.length?favs.map(line).join('\n'):'（なし)')+'\n';
+  s+='■直したい（修正依頼）'+fixs.length+'件\n'+(fixs.length?fixs.map(line).join('\n'):'（なし)');
+  return s;
+}
+var modal=document.getElementById('mkmodal');
+document.getElementById('mksend').addEventListener('click',function(){
+  document.getElementById('mktext').value=summaryText();
+  document.getElementById('mkcopied').textContent='';
+  modal.style.display='flex';
+});
+document.getElementById('mkclose').addEventListener('click',function(){modal.style.display='none';});
+modal.addEventListener('click',function(e){if(e.target===modal)modal.style.display='none';});
+document.getElementById('mkcopy').addEventListener('click',function(){
+  var ta=document.getElementById('mktext'); ta.removeAttribute('readonly'); ta.select();
+  function done(){document.getElementById('mkcopied').textContent='コピーしました。チャットに貼ってください。';ta.setAttribute('readonly','');}
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(ta.value).then(done).catch(function(){try{document.execCommand('copy');}catch(e){}done();});}
+  else{try{document.execCommand('copy');}catch(e){}done();}
+});
+/* viewer integration */
+var viewer=document.getElementById('viewer');
+var curKey=null;
+if(viewer){
+  var vm=document.createElement('div'); vm.id='vmarks';
+  var vbF=document.createElement('button'); vbF.className='mkbtn'; vbF.textContent='★お気に入り';
+  var vbX=document.createElement('button'); vbX.className='mkbtn'; vbX.textContent='✎直したい';
+  var vmemo=document.createElement('input'); vmemo.className='mkmemo'; vmemo.type='text'; vmemo.placeholder='メモ（直したい所・好きな点など）';
+  vm.appendChild(vbF); vm.appendChild(vbX); vm.appendChild(vmemo);
+  vm.addEventListener('click',function(e){e.stopPropagation();});
+  viewer.appendChild(vm);
+  function curRec(){return curKey?data[curKey]:null;}
+  vbF.addEventListener('click',function(){var r=curRec();if(!r)return;r.f=r.f?0:1;save(data);paint();});
+  vbX.addEventListener('click',function(){var r=curRec();if(!r)return;r.x=r.x?0:1;save(data);paint();});
+  vmemo.addEventListener('change',function(){var r=curRec();if(!r)return;r.m=vmemo.value;save(data);paint();});
+  window.__vmEls={vbF:vbF,vbX:vbX,vmemo:vmemo};
+  var origShow=window.show;
+  if(typeof origShow==='function'){
+    window.show=function(el){
+      origShow(el);
+      curKey=null;
+      figs.forEach(function(o){if(o.fg.contains(el))curKey=o.key;});
+      paintViewer();
+    };
+  }
+}
+function paintViewer(){
+  if(!window.__vmEls)return;
+  var r=curKey?data[curKey]:null;
+  var e=window.__vmEls;
+  e.vbF.classList.toggle('on-fav',!!(r&&r.f));
+  e.vbX.classList.toggle('on-fix',!!(r&&r.x));
+  if(r&&document.activeElement!==e.vmemo)e.vmemo.value=r.m||'';
+  e.vmemo.style.display=(r&&(r.f||r.x))?'block':'none';
+}
+paint();
+})();
+</script>
+
+</body></html>
